@@ -190,7 +190,85 @@ class C3(nn.Module):
     def forward(self, x):
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
 
+# SPDA_c3 ---------------------------------------------------------------------------------
+class SpaceToDepth(nn.Module):
+    def __init__(self, block_size=2):
+        super().__init__()
+        self.bs = block_size
 
+    def forward(self, x):
+        N, C, H, W = x.size()
+        x = x.view(N, C, H // self.bs, self.bs, W // self.bs, self.bs)  
+        x = x.permute(0, 3, 5, 1, 2, 4).contiguous()  
+        x = x.view(N, C * (self.bs ** 2), H // self.bs, W // self.bs)  
+        return x
+
+class CoordAtt(nn.Module):
+    def __init__(self, inp, oup, reduction=32):
+        super(CoordAtt, self).__init__()
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+
+        mip = max(8, inp // reduction)
+
+        self.conv1 = nn.Conv2d(inp, mip, kernel_size=1, stride=1, padding=0)
+        self.bn1 = nn.BatchNorm2d(mip)
+        self.act = nn.ReLU()
+        
+        self.conv_h = nn.Conv2d(mip, oup, kernel_size=1, stride=1, padding=0)
+        self.conv_w = nn.Conv2d(mip, oup, kernel_size=1, stride=1, padding=0)
+        
+
+    def forward(self, x):
+        identity = x
+        
+        n,c,h,w = x.size()
+        x_h = self.pool_h(x)
+        x_w = self.pool_w(x).permute(0, 1, 3, 2)
+
+        y = torch.cat([x_h, x_w], dim=2)
+        y = self.conv1(y)
+        y = self.bn1(y)
+        y = self.act(y) 
+
+        x_h, x_w = torch.split(y, [h, w], dim=2)
+        x_w = x_w.permute(0, 1, 3, 2)
+
+        a_h = self.conv_h(x_h).sigmoid()
+        a_w = self.conv_w(x_w).sigmoid()
+
+        out = identity * a_w * a_h
+
+        return out
+
+class SPDA_C3(nn.Module):
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
+        super().__init__()
+        
+        c_ = int(c2 * e)  # hidden channels
+        
+        # Space to Depth Layer
+        self.std = SpaceToDepth(block_size=2)  
+        
+        # Coordinate Attention 
+        self.ca = CoordAtt(c1*4, c1*4)
+        
+        # Convolution Layer 
+        self.cv1 = Conv(c1*4, c_, 3, 1)  
+        
+        # Original C3 structure
+        self.cv2 = Conv(c1, c_, 1, 1)
+        self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)))
+        self.cv3 = Conv(2*c_, c2, 1)
+        
+    def forward(self, x):
+        x = self.std(x)
+        x = self.ca(x) 
+        x = self.cv1(x)
+        y = self.cv2(x)
+        return self.cv3(torch.cat((self.m(x), y), 1)) 
+
+# --------------------------------------------------------------------------------------------------
 class C3x(C3):
     # C3 module with cross-convolutions
     def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
