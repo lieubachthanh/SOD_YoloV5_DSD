@@ -25,30 +25,7 @@ if str(ROOT) not in sys.path:
 if platform.system() != "Windows":
     ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
-from models.common import (
-    C3,
-    C3SPP,
-    C3TR,
-    SPP,
-    SPPF,
-    Bottleneck,
-    BottleneckCSP,
-    C3Ghost,
-    C3x,
-    Classify,
-    Concat,
-    Contract,
-    Conv,
-    CrossConv,
-    DetectMultiBackend,
-    DWConv,
-    DWConvTranspose2d,
-    Expand,
-    Focus,
-    GhostBottleneck,
-    GhostConv,
-    Proto,
-)
+from models.common import *
 from models.experimental import MixConv2d
 from utils.autoanchor import check_anchor_order
 from utils.general import LOGGER, check_version, check_yaml, colorstr, make_divisible, print_args
@@ -373,6 +350,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             CrossConv,
             BottleneckCSP,
             C3,
+            SPDA_C3,
             C3TR,
             C3SPP,
             C3Ghost,
@@ -385,7 +363,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
                 c2 = make_divisible(c2 * gw, ch_mul)
 
             args = [c1, c2, *args[1:]]
-            if m in {BottleneckCSP, C3, C3TR, C3Ghost, C3x}:
+            if m in {BottleneckCSP, C3, C3TR, C3Ghost, SPDA_C3, C3x}:
                 args.insert(2, n)  # number of repeats
                 n = 1
         elif m is nn.BatchNorm2d:
