@@ -144,7 +144,7 @@ def run(
     plots=True,
     callbacks=Callbacks(),
     compute_loss=None,
-    soft=False
+    soft=True
 ):
     # Initialize/load model and set device
     training = model is not None
