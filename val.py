@@ -50,8 +50,8 @@ from utils.general import (
     coco80_to_coco91_class,
     colorstr,
     increment_path,
-    non_max_suppression,
     soft_nms,
+    non_max_suppression,
     print_args,
     scale_boxes,
     xywh2xyxy,
@@ -63,7 +63,7 @@ from utils.torch_utils import select_device, smart_inference_mode
 
 
 def save_one_txt(predn, save_conf, shape, file):
-    # Save one txt result
+    """Saves one detection result to a txt file in normalized xywh format, optionally including confidence."""
     gn = torch.tensor(shape)[[1, 0, 1, 0]]  # normalization gain whwh
     for *xyxy, conf, cls in predn.tolist():
         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
@@ -73,7 +73,11 @@ def save_one_txt(predn, save_conf, shape, file):
 
 
 def save_one_json(predn, jdict, path, class_map):
-    # Save one JSON result {"image_id": 42, "category_id": 18, "bbox": [258.15, 41.29, 348.26, 243.78], "score": 0.236}
+    """
+    Saves one JSON detection result with image ID, category ID, bounding box, and score.
+
+    Example: {"image_id": 42, "category_id": 18, "bbox": [258.15, 41.29, 348.26, 243.78], "score": 0.236}
+    """
     image_id = int(path.stem) if path.stem.isnumeric() else path.stem
     box = xyxy2xywh(predn[:, :4])  # xywh
     box[:, :2] -= box[:, 2:] / 2  # xy center to top-left corner
@@ -144,7 +148,7 @@ def run(
     plots=True,
     callbacks=Callbacks(),
     compute_loss=None,
-    soft=True
+    soft=True,
 ):
     # Initialize/load model and set device
     training = model is not None
@@ -242,7 +246,7 @@ def run(
         lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
         with dt[2]:
             if soft:
-                preds = soft_nms(preds, conf_thres, iou_thres, multi_label=True)
+                preds = soft_nms(preds,conf_thres, iou_thres, multi_label=True)
             else:
                 preds = non_max_suppression(
                     preds, conf_thres, iou_thres, labels=lb, multi_label=True, agnostic=single_cls, max_det=max_det
@@ -364,6 +368,7 @@ def run(
 
 
 def parse_opt():
+    """Parses command-line options for YOLOv5 model inference configuration."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=str, default=ROOT / "data/coco128.yaml", help="dataset.yaml path")
     parser.add_argument("--weights", nargs="+", type=str, default=ROOT / "yolov5s.pt", help="model path(s)")
@@ -396,6 +401,9 @@ def parse_opt():
 
 
 def main(opt):
+    """Executes YOLOv5 tasks like training, validation, testing, speed, and study benchmarks based on provided
+    options.
+    """
     check_requirements(ROOT / "requirements.txt", exclude=("tensorboard", "thop"))
 
     if opt.task in ("train", "val", "test"):  # run normally

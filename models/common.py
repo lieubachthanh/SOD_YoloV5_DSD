@@ -258,7 +258,7 @@ class SPDA_C3(nn.Module):
         
         # Original C3 structure
         # self.cv2 = Conv(c1, c_, 1, 1)
-        self.cv2 = Conv(c1, c_, 1, 1)
+        self.cv2 = Conv(c1*4, c_, 3, 1)
         self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)))
         self.cv3 = Conv(2*c_, c2, 1)
         
