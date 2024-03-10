@@ -270,6 +270,54 @@ class SPDA_C3(nn.Module):
         return self.cv3(torch.cat((self.m(x), y), 1)) 
 
 # --------------------------------------------------------------------------------------------------
+class C3_Res2(nn.Module):
+    # CSP Bottleneck with 3 convolutions and Res2Net module
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5, res2_scale=1.0):  # ch_in, ch_out, number, shortcut, groups, expansion, res2_scale
+        super().__init__()
+        c_ = int(c2 * e)  # hidden channels
+        self.cv1 = Conv(c1, c_, 1, 1)
+        self.cv2 = Conv(c1, c_, 1, 1)
+        self.cv3 = Conv(2 * c_, c2, 1)  # optional act=FReLU(c2)
+        self.m = nn.Sequential(*(Bottleneck_Res2(c_, c_, shortcut, g, e=1.0, res2_scale=res2_scale) for _ in range(n)))
+
+    def forward(self, x):
+        return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
+
+class Bottleneck_Res2(nn.Module):
+    # Bottleneck with Res2Net module
+    def __init__(self, c1, c2, shortcut=True, g=1, e=0.5, res2_scale=1.0):  # ch_in, ch_out, shortcut, groups, expansion, res2_scale
+        super().__init__()
+        c_ = int(c2 * e)  # hidden channels
+        self.cv1 = Conv(c1, c_, 1, 1)
+        self.cv2 = nn.Sequential(
+            Res2Net_Module(c_, c_, res2_scale),
+            Conv(c_, c2, 3, 1, g=g)
+        )
+        self.add = shortcut and c1 == c2
+
+class Res2Net_Module(nn.Module):
+    # Res2Net module from Gao et al. 'Res2Net: A New Multi-scale Backbone Architecture'
+    def __init__(self, c1, c2, res2_scale=1.0):
+        super().__init__()
+        self.split = nn.Sequential(
+            Conv(c1, c1 * res2_scale, 1, 1),
+            nn.Identity(),
+            nn.Identity()
+        )
+        self.channels = [int(c2 * res2_scale // 2)] * 2
+        self.conv = nn.ModuleList([Conv(c1 * res2_scale // 2, c2 // 2, 3, 1, 1) for _ in range(2)])
+        self.concat = Conv(c2, c2, 1, 1)
+
+    def forward(self, x):
+        x1 = self.split[1](x)
+        x2 = self.split[2](x)
+        x1 = self.conv[0](x1)
+        x2 = self.conv[1](x2)
+        x = torch.cat((x1, x2), 1)
+        x = self.concat(x)
+        return x
+
+#--------------------------------------------------------------------------------------------------
 class C3x(C3):
     # C3 module with cross-convolutions
     def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
