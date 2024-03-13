@@ -257,17 +257,24 @@ class SPDA_C3(nn.Module):
         self.cv1 = Conv(c1*4, c_, 3, 1)  
         
         # Original C3 structure
-        # self.cv2 = Conv(c1, c_, 1, 1)
+        # self.cv2 = Conv(c1, c_, 3, 1)
         self.cv2 = Conv(c1*4, c_, 3, 1)
         self.m = nn.Sequential(*(Bottleneck(c_, c_, shortcut, g, e=1.0) for _ in range(n)))
-        self.cv3 = Conv(2*c_, c2, 1)
+        self.cv3 = Conv(2*c_, c2, 3,1)
         
     def forward(self, x):
+        print("Input shape", x.shape)
         x = self.std(x)
+        print("space to depth",x.shape)
         x = self.ca(x) 
-        x = self.cv1(x)
+        print("ca",x.shape)
         y = self.cv2(x)
-        return self.cv3(torch.cat((self.m(x), y), 1)) 
+        print("after cv2",x.shape)
+        x = self.cv1(x)
+        print("after cv1",x.shape)
+        a= self.cv3(torch.cat((self.m(x), y), 1)) 
+        print('output',a.shape)
+        return a
 
 # --------------------------------------------------------------------------------------------------
 class C3_Res2(nn.Module):
