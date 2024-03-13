@@ -272,98 +272,85 @@ class SPDA_C3(nn.Module):
 # --------------------------------------------------------------------------------------------------
 class C3_Res2(nn.Module):
     # CSP Bottleneck with 3 convolutions and Res2Net module
-    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5, res2_scale=1.0):  # ch_in, ch_out, number, shortcut, groups, expansion, res2_scale
+    def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5, res2_scale=4):  # ch_in, ch_out, number, shortcut, groups, expansion, res2_scale
         super().__init__()
         c_ = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, c_, 1, 1)
         self.cv2 = Conv(c1, c_, 1, 1)
         self.cv3 = Conv(2 * c_, c2, 1)  # optional act=FReLU(c2)
-        self.m = nn.Sequential(*(Res2NetBottleneck(c_, c_, shortcut, g, e=1.0, res2_scale=res2_scale) for _ in range(n)))
+        self.m = nn.Sequential(*(Res2NetModule(c_, c_, shortcut, g, e=1.0, scale=res2_scale) for _ in range(n)))
 
     def forward(self, x):
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
 
-class Res2NetBottleneck(nn.Module):
-    expansion = 4
+class Res2NetModule(nn.Module):
+    def __init__(self, c1, c2, shortcut=True, g=1, e=0.5, scale=4):
+        """
+        Args:
+            c1 (int): Input channels.
+            c2 (int): Output channels.
+            shortcut (bool): Whether to use shortcut connection.
+            g (int): Number of groups for grouped convolution.
+            e (float): Expansion ratio for the hidden channels.
+            scale (int): Number of scales or groups.
+        """
+        super(Res2NetModule, self).__init__()
+        c_ = int(c2 * e)  # Hidden channels
+        self.scale = scale
+        self.shortcut = shortcut and (c1 == c2 * scale)
 
-    def __init__(self, inplanes, planes, downsample=None, stride=1, scales=4, groups=1, se=False,  norm_layer=None):
-        super(Res2NetBottleneck, self).__init__()
-        if planes % scales != 0:
-            raise ValueError('Planes must be divisible by scales')
-        if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
-        bottleneck_planes = groups * planes
-        self.conv1 = conv1x1(inplanes, bottleneck_planes, stride)
-        self.bn1 = norm_layer(bottleneck_planes)
-        self.conv2 = nn.ModuleList([conv3x3(bottleneck_planes // scales, bottleneck_planes // scales, groups=groups) for _ in range(scales-1)])
-        self.bn2 = nn.ModuleList([norm_layer(bottleneck_planes // scales) for _ in range(scales-1)])
-        self.conv3 = conv1x1(bottleneck_planes, planes * self.expansion)
-        self.bn3 = norm_layer(planes * self.expansion)
+        # Parallel residual branches
+        self.conv1 = nn.Conv2d(c1, c_ * scale, kernel_size=1, stride=1, padding=0, bias=False)
+        self.bn1 = nn.BatchNorm2d(c_ * scale)
         self.relu = nn.ReLU(inplace=True)
-        self.se = SEModule(planes * self.expansion) if se else None
-        self.downsample = downsample
-        self.stride = stride
-        self.scales = scales
+
+        self.conv2 = nn.ModuleList([nn.Conv2d(c_, c2, kernel_size=3, stride=1, padding=1, groups=g, bias=False) for _ in range(scale)])
+        self.bn2 = nn.ModuleList([(nn.BatchNorm2d(c2)) for _ in range(scale)])
+
+        # Shortcut connection
+        self.shortcut_conv = nn.Sequential(
+            nn.Conv2d(c1, c2 * scale, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(c2 * scale)
+        ) if not self.shortcut else None
+
+        # Final fusion
+        self.conv3 = nn.Conv2d( c2 * scale , c2 , kernel_size=1, stride=1, padding=0, bias=False)
+        self.bn3 = nn.BatchNorm2d(c2)
 
     def forward(self, x):
-        identity = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        xs = torch.chunk(out, self.scales, 1)
-        ys = []
-        for s in range(self.scales):
-            if s == 0:
-                ys.append(xs[s])
-            elif s == 1:
-                ys.append(self.relu(self.bn2[s-1](self.conv2[s-1](xs[s]))))
-            else:
-                ys.append(self.relu(self.bn2[s-1](self.conv2[s-1](xs[s] + ys[-1]))))
-        out = torch.cat(ys, 1)
-
-        out = self.conv3(out)
-        out = self.bn3(out)
-
-        if self.se is not None:
-            out = self.se(out)
-
-        if self.downsample is not None:
-            identity = self.downsample(identity)
-
-        out += identity
-        out = self.relu(out)
-
-        return out
-
-def conv3x3(in_planes, out_planes, stride=1, groups=1):
-    """3x3 convolution with padding"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=1, groups=groups, bias=False)
-
-
-def conv1x1(in_planes, out_planes, stride=1):
-    """1x1 convolution"""
-    return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
-
-
-class SEModule(nn.Module):
-    def __init__(self, channels, reduction=16):
-        super(SEModule, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc1 = nn.Conv2d(channels, channels // reduction, kernel_size=1, padding=0)
-        self.relu = nn.ReLU(inplace=True)
-        self.fc2 = nn.Conv2d(channels // reduction, channels, kernel_size=1, padding=0)
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, input):
-        x = self.avg_pool(input)
-        x = self.fc1(x)
+        shortcut = x
+        x = self.conv1(x)
+        x = self.bn1(x)
         x = self.relu(x)
-        x = self.fc2(x)
-        x = self.sigmoid(x)
-        return input * x
+
+        # Split the input into scale groups
+        spx = torch.split(x, x.size(1) // self.scale, dim=1)
+        
+        for i in range(0, self.scale):
+            # print("Split x", spx[i][0] )
+            if i == 0:
+                sp = spx[i]  
+            else:
+                sp = sp + spx[i]
+                sp = self.conv2[i](sp)
+                sp = self.relu(self.bn2[i](sp))
+            if i==0:
+                x = sp
+            else:
+                x = torch.cat((x, sp), 1)
+    
+        # x = torch.cat((x, spx[(self.scale -1)]),1)
+        # x = torch.cat((out, self.pool(spx[self.nums])),1)    
+       
+        # Final fusion
+        x = self.conv3(x)
+        x = self.bn3(x)
+
+        x = x + shortcut
+        x = self.relu(x)
+            
+        return x
+
 
 #--------------------------------------------------------------------------------------------------
 class C3x(C3):
