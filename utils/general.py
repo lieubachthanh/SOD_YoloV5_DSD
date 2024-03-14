@@ -1001,7 +1001,7 @@ def clip_segments(segments, shape):
         segments[:, 0] = segments[:, 0].clip(0, shape[1])  # x
         segments[:, 1] = segments[:, 1].clip(0, shape[0])  # y
 
-def soft_nms(prediction, conf_thres=0.25, iou_thres=0.45, multi_label=False):
+def soft_nms(prediction, conf_thres=0.25, iou_thres=0.45, multi_label=False, sigma = 0.5):
     """Runs Soft Non-Maximum Suppression (SNMS) on inference results
 
     Returns:
@@ -1065,14 +1065,14 @@ def soft_nms(prediction, conf_thres=0.25, iou_thres=0.45, multi_label=False):
             elif n > 30000:
                 dc = dc[:30000]
             if soft_nms:
-                sigma = 0.5
+                Sigma = sigma
                 while len(dc):
                     det_max.append(dc[:1])
                     if len(dc) == 1:
                         break
                     iou = bbox_ciou(dc[0], dc[1:])
                     dc = dc[1:]
-                    dc[:, 4] *= torch.exp(-iou ** 2 / sigma)
+                    dc[:, 4] *= torch.exp(-iou ** 2 / Sigma)
                     dc = dc[dc[:, 4] > conf_thres]
         if len(det_max):
             det_max = torch.cat(det_max)
