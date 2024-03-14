@@ -263,17 +263,17 @@ class SPDA_C3(nn.Module):
         self.cv3 = Conv(2*c_, c2, 3,1)
         
     def forward(self, x):
-        print("Input shape", x.shape)
+        # print("Input shape", x.shape)
         x = self.std(x)
-        print("space to depth",x.shape)
+        # print("space to depth",x.shape)
         x = self.ca(x) 
-        print("ca",x.shape)
+        # print("ca",x.shape)
         y = self.cv2(x)
-        print("after cv2",x.shape)
+        # print("after cv2",x.shape)
         x = self.cv1(x)
-        print("after cv1",x.shape)
+        # print("after cv1",x.shape)
         a= self.cv3(torch.cat((self.m(x), y), 1)) 
-        print('output',a.shape)
+        # print('output',a.shape)
         return a
 
 # --------------------------------------------------------------------------------------------------
