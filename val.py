@@ -148,7 +148,7 @@ def run(
     plots=True,
     callbacks=Callbacks(),
     compute_loss=None,
-    soft=False,
+    soft=None,
 ):
     # Initialize/load model and set device
     training = model is not None
@@ -245,8 +245,8 @@ def run(
         targets[:, 2:] *= torch.tensor((width, height, width, height), device=device)  # to pixels
         lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
         with dt[2]:
-            if soft:
-                preds = soft_nms(preds,conf_thres, iou_thres, multi_label=True)
+            if soft != None:
+                preds = soft_nms(preds,conf_thres, iou_thres, multi_label=True, sigma=soft)
             else:
                 preds = non_max_suppression(
                     preds, conf_thres, iou_thres, labels=lb, multi_label=True, agnostic=single_cls, max_det=max_det
@@ -392,7 +392,7 @@ def parse_opt():
     parser.add_argument("--exist-ok", action="store_true", help="existing project/name ok, do not increment")
     parser.add_argument("--half", action="store_true", help="use FP16 half-precision inference")
     parser.add_argument("--dnn", action="store_true", help="use OpenCV DNN for ONNX inference")
-    parser.add_argument("--soft", action="store_true", help="use Soft-NMS")
+    parser.add_argument("--soft", type=float, default=None, help="use Soft-NMS")
     opt = parser.parse_args()
     opt.data = check_yaml(opt.data)  # check YAML
     opt.save_json |= opt.data.endswith("coco.yaml")

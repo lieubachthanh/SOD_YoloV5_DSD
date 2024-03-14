@@ -557,7 +557,7 @@ def parse_opt(known=False):
     parser.add_argument("--ndjson-console", action="store_true", help="Log ndjson to console")
     parser.add_argument("--ndjson-file", action="store_true", help="Log ndjson to file")
     
-    parser.add_argument("--soft", action="store_true", help="use Soft-NMS")
+    parser.add_argument("--soft", type=float, default=None, help="use Soft-NMS")
 
     return parser.parse_known_args()[0] if known else parser.parse_args()
 

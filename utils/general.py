@@ -1002,7 +1002,7 @@ def clip_segments(segments, shape):
         segments[:, 1] = segments[:, 1].clip(0, shape[0])  # y
 
 def soft_nms(prediction, conf_thres=0.25, iou_thres=0.45, multi_label=False):
-    """Runs Non-Maximum Suppression (NMS) on inference results
+    """Runs Soft Non-Maximum Suppression (SNMS) on inference results
 
     Returns:
          list of detections, on (n,6) tensor per image [xyxy, conf, cls]
